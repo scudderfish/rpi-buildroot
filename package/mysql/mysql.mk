@@ -23,7 +23,7 @@ MYSQL_CONF_ENV = \
 	ac_cv_have_decl_HAVE_IB_GCC_ATOMIC_BUILTINS=yes \
 	mysql_cv_new_rl_interface=yes
 
-MYSQL_CONF_OPT = \
+MYSQL_CONF_OPTS = \
 	--without-ndb-binlog \
 	--without-docs \
 	--without-man \
@@ -43,14 +43,14 @@ endif
 
 ifeq ($(BR2_PACKAGE_MYSQL_SERVER),y)
 MYSQL_DEPENDENCIES += host-mysql host-bison
-HOST_MYSQL_DEPENDENCIES =
+HOST_MYSQL_DEPENDENCIES = host-zlib host-ncurses
 
-HOST_MYSQL_CONF_OPT = \
+HOST_MYSQL_CONF_OPTS = \
 	--with-embedded-server \
 	--disable-mysql-maintainer-mode
 
-MYSQL_CONF_OPT += \
-	--disable-dependency-tracking \
+MYSQL_CONF_OPTS += \
+	--localstatedir=/var/mysql \
 	--with-atomic-ops=up \
 	--with-embedded-server \
 	--without-query-cache \
@@ -69,9 +69,9 @@ MYSQL_CONF_OPT += \
 # Debugging is only available for the server, so no need for
 # this if-block outside of the server if-block
 ifeq ($(BR2_ENABLE_DEBUG),y)
-MYSQL_CONF_OPT += --with-debug=full
+MYSQL_CONF_OPTS += --with-debug=full
 else
-MYSQL_CONF_OPT += --without-debug
+MYSQL_CONF_OPTS += --without-debug
 endif
 
 define HOST_MYSQL_BUILD_CMDS
@@ -88,8 +88,23 @@ define HOST_MYSQL_INSTALL_CMDS
 	$(INSTALL) -m 0755  $(@D)/sql/gen_lex_hash  $(HOST_DIR)/usr/bin/
 endef
 
+define MYSQL_USERS
+	mysql -1 nogroup -1 * /var/mysql - - MySQL daemon
+endef
+
+define MYSQL_ADD_FOLDER
+	$(INSTALL) -d $(TARGET_DIR)/var/mysql
+endef
+
+MYSQL_POST_INSTALL_TARGET_HOOKS += MYSQL_ADD_FOLDER
+
+define MYSQL_INSTALL_INIT_SYSV
+	$(INSTALL) -D -m 0755 package/mysql/S97mysqld \
+		$(TARGET_DIR)/etc/init.d/S97mysqld
+endef
+
 else
-MYSQL_CONF_OPT += \
+MYSQL_CONF_OPTS += \
 	--without-server
 endif
 

@@ -33,15 +33,7 @@ use with the test-drive image, download and usage instructions below:
 	wget http://dl.guillermoamaral.com/rpi/rpi-buildroot-toolchain.tar.xz
 	tar -xvJf rpi-buildroot-toolchain.tar.xz
 	source rpi-buildroot-toolchain-x86_64/env
-	$CC -I"${BUILDROOT_STAGING_DIR}/usr/include" \
-	    -I"${BUILDROOT_STAGING_DIR}/opt/vc/include" \
-	    -L"${BUILDROOT_STAGING_DIR}/opt/vc/lib" \
-	    -L"${BUILDROOT_STAGING_DIR}/usr/lib" \
-	    -L"${BUILDROOT_STAGING_DIR}/lib" \
-	    -L"${BUILDROOT_TARGET_DIR}/opt/vc/lib" \
-	    -L"${BUILDROOT_TARGET_DIR}/usr/lib" \
-	    -L"${BUILDROOT_TARGET_DIR}/lib" \
-	    main.c # example usage
+	$CC rpi-buildroot-toolchain-x86_64/main.c # example usage
 
 If you're interested in using the toolchain with CMake, you may want to
 download the toolchain cmake file used with Marshmallow Game Engine:
@@ -99,6 +91,11 @@ Create the partitions on the SD card. Run the following as root.
 	> 2
 	> <enter>
 	> <enter>       # fill the remaining disk, adjust size to fit your needs
+	> t             # change partition type
+	> 1             # select first partition
+	> e             # use type 'e' (FAT16)
+	> a             # make partition bootable
+	> 1             # select first partition
 	> p             # double check everything looks right
 	> w             # write partition table to disk.
 
@@ -109,11 +106,11 @@ Now format the boot partition as FAT 16
 	mkdir -p /media/boot
 	mount /dev/sdx1 /media/boot
 
-You will need to copy all the files in *output/target/boot* to your *boot*
+You will need to copy all the files in *output/images/boot* to your *boot*
 partition.
 
 	# run the following as root
-	cp output/target/boot/* /media/boot
+	cp output/images/boot/* /media/boot
 	umount /media/boot
 
 The second (rootfs) can be as big as you want, but with a 200 MB minimum,

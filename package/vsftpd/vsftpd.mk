@@ -10,9 +10,17 @@ VSFTPD_LIBS = -lcrypt
 VSFTPD_LICENSE = GPLv2
 VSFTPD_LICENSE_FILES = COPYING
 
+define VSFTPD_DISABLE_UTMPX
+	$(SED) 's/.*VSF_BUILD_UTMPX/#undef VSF_BUILD_UTMPX/' $(@D)/builddefs.h
+endef
+
 define VSFTPD_ENABLE_SSL
 	$(SED) 's/.*VSF_BUILD_SSL/#define VSF_BUILD_SSL/' $(@D)/builddefs.h
 endef
+
+ifeq ($(BR2_PACKAGE_VSFTPD_UTMPX),)
+VSFTPD_POST_CONFIGURE_HOOKS += VSFTPD_DISABLE_UTMPX
+endif
 
 ifeq ($(BR2_PACKAGE_OPENSSL),y)
 VSFTPD_DEPENDENCIES += openssl
@@ -36,10 +44,10 @@ define VSFTPD_BUILD_CMDS
 endef
 
 define VSFTPD_INSTALL_TARGET_CMDS
-	install -D -m 755 $(@D)/vsftpd $(TARGET_DIR)/usr/sbin/vsftpd
-	install -D -m 644 $(@D)/vsftpd.8 \
+	$(INSTALL) -D -m 755 $(@D)/vsftpd $(TARGET_DIR)/usr/sbin/vsftpd
+	$(INSTALL) -D -m 644 $(@D)/vsftpd.8 \
 		$(TARGET_DIR)/usr/share/man/man8/vsftpd.8
-	install -D -m 644 $(@D)/vsftpd.conf.5 \
+	$(INSTALL) -D -m 644 $(@D)/vsftpd.conf.5 \
 		$(TARGET_DIR)/usr/share/man/man5/vsftpd.conf.5
 	test -f $(TARGET_DIR)/etc/init.d/S70vsftpd || \
 		$(INSTALL) -D -m 755 package/vsftpd/vsftpd-init \
@@ -47,7 +55,7 @@ define VSFTPD_INSTALL_TARGET_CMDS
 	test -f $(TARGET_DIR)/etc/vsftpd.conf || \
 		$(INSTALL) -D -m 644 $(@D)/vsftpd.conf \
 			$(TARGET_DIR)/etc/vsftpd.conf
-	install -d -m 700 $(TARGET_DIR)/usr/share/empty
+	$(INSTALL) -d -m 700 $(TARGET_DIR)/usr/share/empty
 endef
 
 $(eval $(generic-package))

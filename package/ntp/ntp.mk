@@ -15,23 +15,30 @@ ifneq ($(BR2_INET_IPV6),y)
 	NTP_CONF_ENV += isc_cv_have_in6addr_any=no
 endif
 
-NTP_CONF_OPT = --with-shared \
+NTP_CONF_OPTS = --with-shared \
 		--program-transform-name=s,,, \
 		--disable-tickadj
 
 ifeq ($(BR2_PACKAGE_OPENSSL),y)
-	NTP_CONF_OPT += --with-crypto
+	NTP_CONF_OPTS += --with-crypto
 	NTP_DEPENDENCIES += openssl
 else
-	NTP_CONF_OPT += --without-crypto
+	NTP_CONF_OPTS += --without-crypto
 endif
 
 ifeq ($(BR2_PACKAGE_NTP_NTPSNMPD),y)
-	NTP_CONF_OPT += \
+	NTP_CONF_OPTS += \
 		--with-net-snmp-config=$(STAGING_DIR)/usr/bin/net-snmp-config
 	NTP_DEPENDENCIES += netsnmp
 else
-	NTP_CONF_OPT += --without-ntpsnmpd
+	NTP_CONF_OPTS += --without-ntpsnmpd
+endif
+
+ifeq ($(BR2_PACKAGE_NTP_NTPD_ATOM_PPS),y)
+	NTP_CONF_OPTS += --enable-ATOM
+	NTP_DEPENDENCIES += pps-tools
+else
+	NTP_CONF_OPTS += --disable-ATOM
 endif
 
 define NTP_PATCH_FIXUPS
@@ -52,10 +59,7 @@ NTP_INSTALL_FILES_$(BR2_PACKAGE_NTP_TICKADJ) += util/tickadj
 define NTP_INSTALL_TARGET_CMDS
 	$(if $(BR2_PACKAGE_NTP_NTPD), install -m 755 $(@D)/ntpd/ntpd $(TARGET_DIR)/usr/sbin/ntpd)
 	test -z "$(NTP_INSTALL_FILES_y)" || install -m 755 $(addprefix $(@D)/,$(NTP_INSTALL_FILES_y)) $(TARGET_DIR)/usr/bin/
-	@if [ ! -f $(TARGET_DIR)/etc/default/ntpd ]; then \
-		install -m 755 -d $(TARGET_DIR)/etc/default ; \
-		install -m 644 package/ntp/ntpd.etc.default $(TARGET_DIR)/etc/default/ntpd ; \
-	fi
+	$(INSTALL) -m 644 package/ntp/ntpd.etc.conf $(TARGET_DIR)/etc/ntp.conf
 endef
 
 ifeq ($(BR2_PACKAGE_NTP_NTPD),y)

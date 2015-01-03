@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-OPENSSL_VERSION = 1.0.1g
+OPENSSL_VERSION = 1.0.1j
 OPENSSL_SITE = http://www.openssl.org/source
 OPENSSL_LICENSE = OpenSSL or SSLeay
 OPENSSL_LICENSE_FILES = LICENSE
@@ -42,6 +42,12 @@ ifeq ($(BR2_powerpc_401)$(BR2_powerpc_403)$(BR2_powerpc_405)$(BR2_powerpc_405fp)
 	OPENSSL_TARGET_ARCH = ppc
 endif
 endif
+ifeq ($(ARCH),powerpc64)
+	OPENSSL_TARGET_ARCH = ppc64
+endif
+ifeq ($(ARCH),powerpc64le)
+	OPENSSL_TARGET_ARCH = ppc64le
+endif
 ifeq ($(ARCH),x86_64)
 	OPENSSL_TARGET_ARCH = x86_64
 endif
@@ -55,12 +61,13 @@ define HOST_OPENSSL_CONFIGURE_CMDS
 	(cd $(@D); \
 		$(HOST_CONFIGURE_OPTS) \
 		./config \
-		--prefix=/usr \
-		--openssldir=/etc/ssl \
+		--prefix=$(HOST_DIR)/usr \
+		--openssldir=$(HOST_DIR)/etc/ssl \
 		--libdir=/lib \
 		shared \
-		no-zlib \
+		zlib-dynamic \
 	)
+	$(SED) "s:-O[0-9]:$(HOST_CFLAGS):" $(@D)/Makefile
 endef
 
 define OPENSSL_CONFIGURE_CMDS
@@ -100,7 +107,7 @@ define OPENSSL_INSTALL_STAGING_CMDS
 endef
 
 define HOST_OPENSSL_INSTALL_CMDS
-	$(MAKE1) -C $(@D) INSTALL_PREFIX=$(HOST_DIR) install
+	$(MAKE1) -C $(@D) install
 endef
 
 define OPENSSL_INSTALL_TARGET_CMDS
@@ -108,6 +115,16 @@ define OPENSSL_INSTALL_TARGET_CMDS
 	rm -rf $(TARGET_DIR)/usr/lib/ssl
 	rm -f $(TARGET_DIR)/usr/bin/c_rehash
 endef
+
+# libdl has no business in a static build
+ifeq ($(BR2_PREFER_STATIC_LIB),y)
+define OPENSSL_FIXUP_STATIC_PKGCONFIG
+	$(SED) 's/-ldl//' $(STAGING_DIR)/usr/lib/pkgconfig/libcrypto.pc
+	$(SED) 's/-ldl//' $(STAGING_DIR)/usr/lib/pkgconfig/libssl.pc
+	$(SED) 's/-ldl//' $(STAGING_DIR)/usr/lib/pkgconfig/openssl.pc
+endef
+OPENSSL_POST_INSTALL_STAGING_HOOKS += OPENSSL_FIXUP_STATIC_PKGCONFIG
+endif
 
 ifneq ($(BR2_PREFER_STATIC_LIB),y)
 # libraries gets installed read only, so strip fails

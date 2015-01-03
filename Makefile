@@ -24,8 +24,11 @@
 # You shouldn't need to mess with anything beyond this point...
 #--------------------------------------------------------------
 
+# This is our default rule, so must come first
+all:
+
 # Set and export the version string
-export BR2_VERSION := 2014.05
+export BR2_VERSION := 2014.11
 
 # Check for minimal make version (note: this check will break at make 10.x)
 MIN_MAKE_VERSION = 3.81
@@ -38,7 +41,7 @@ export HOSTARCH := $(shell uname -m | \
 	    -e s/sun4u/sparc64/ \
 	    -e s/arm.*/arm/ \
 	    -e s/sa110/arm/ \
-	    -e s/ppc64/powerpc/ \
+	    -e s/ppc64/powerpc64/ \
 	    -e s/ppc/powerpc/ \
 	    -e s/macppc/powerpc/\
 	    -e s/sh.*/sh/)
@@ -89,7 +92,7 @@ CONFIG_DIR := $(TOPDIR)
 NEED_WRAPPER =
 else
 # other packages might also support Linux-style out of tree builds
-# with the O=<dir> syntax (E.G. Busybox does). As make automatically
+# with the O=<dir> syntax (E.G. BusyBox does). As make automatically
 # forwards command line variable definitions those packages get very
 # confused. Fix this by telling make to not do so
 MAKEOVERRIDES =
@@ -271,6 +274,9 @@ unexport DESTDIR
 # Causes breakage with packages that needs host-ruby
 unexport RUBYOPT
 
+include package/pkg-utils.mk
+include package/doc-asciidoc.mk
+
 ifeq ($(BR2_HAVE_DOT_CONFIG),y)
 
 ################################################################################
@@ -290,6 +296,7 @@ unexport TAR_OPTIONS
 unexport CONFIG_SITE
 unexport QMAKESPEC
 unexport TERMINFO
+unexport MACHINE
 
 GNU_HOST_NAME := $(shell support/gnuconfig/config.guess)
 
@@ -309,7 +316,7 @@ KERNEL_ARCH := $(shell echo "$(ARCH)" | sed -e "s/-.*//" \
 	-e s/aarch64/arm64/ \
 	-e s/bfin/blackfin/ \
 	-e s/parisc64/parisc/ \
-	-e s/powerpc64/powerpc/ \
+	-e s/powerpc64.*/powerpc/ \
 	-e s/ppc.*/powerpc/ -e s/mips.*/mips/ \
 	-e s/sh.*/sh/ \
 	-e s/microblazeel/microblaze/)
@@ -324,9 +331,6 @@ HOST_DIR := $(call qstrip,$(BR2_HOST_DIR))
 
 # Quotes are needed for spaces and all in the original PATH content.
 BR_PATH = "$(HOST_DIR)/bin:$(HOST_DIR)/sbin:$(HOST_DIR)/usr/bin:$(HOST_DIR)/usr/sbin:$(PATH)"
-
-# locales to generate
-GENERATE_LOCALE = $(call qstrip,$(BR2_GENERATE_LOCALE))
 
 TARGET_SKELETON = $(TOPDIR)/system/skeleton
 
@@ -372,7 +376,7 @@ include support/dependencies/dependencies.mk
 # We also need the various per-package makefiles, which also add
 # each selected package to TARGETS if that package was selected
 # in the .config file.
-include toolchain/helpers.mk
+include toolchain/*.mk
 include toolchain/*/*.mk
 
 # Include the package override file if one has been provided in the
@@ -390,16 +394,6 @@ include system/system.mk
 include fs/common.mk
 
 include $(BR2_EXTERNAL)/external.mk
-
-ifeq ($(BR2_TOOLCHAIN_USES_GLIBC),y)
-ifneq ($(GENERATE_LOCALE),)
-TARGETS += target-generatelocales
-endif
-endif
-
-ifeq ($(BR2_ECLIPSE_REGISTER),y)
-TARGETS += toolchain-eclipse-register
-endif
 
 TARGETS_SOURCE := $(patsubst %,%-source,$(TARGETS))
 TARGETS_DIRCLEAN := $(patsubst %,%-dirclean,$(TARGETS))
@@ -424,7 +418,7 @@ HOST_DEPS = $(sort $(foreach dep,\
 HOST_SOURCE += $(addsuffix -source,$(sort $(TARGETS_HOST_DEPS) $(HOST_DEPS)))
 
 TARGETS_LEGAL_INFO := $(patsubst %,%-legal-info,\
-		$(TARGETS) $(TARGETS_HOST_DEPS) $(HOST_DEPS))))
+		$(TARGETS) $(TARGETS_HOST_DEPS) $(HOST_DEPS))
 
 dirs: $(BUILD_DIR) $(STAGING_DIR) $(TARGET_DIR) \
 	$(HOST_DIR) $(BINARIES_DIR)
@@ -433,10 +427,6 @@ $(BUILD_DIR)/buildroot-config/auto.conf: $(BR2_CONFIG)
 	$(MAKE1) $(EXTRAMAKEARGS) HOSTCC="$(HOSTCC_NOCCACHE)" HOSTCXX="$(HOSTCXX_NOCCACHE)" silentoldconfig
 
 prepare: $(BUILD_DIR)/buildroot-config/auto.conf
-
-# Add base dependencies to all targets even on those not based on the
-# package framework.
-$(TARGETS): dirs prepare dependencies
 
 world: target-post-image
 
@@ -510,13 +500,52 @@ STRIP_FIND_CMD += -type f \( -perm /111 -o -name '*.so*' \)
 #   done for kernel modules with incorrect permissions.
 STRIP_FIND_CMD += -not \( $(call findfileclauses,libpthread*.so* *.ko $(call qstrip,$(BR2_STRIP_EXCLUDE_FILES))) \) -print
 
+ifeq ($(BR2_ECLIPSE_REGISTER),y)
+define TOOLCHAIN_ECLIPSE_REGISTER
+	./support/scripts/eclipse-register-toolchain `readlink -f $(O)` \
+		$(notdir $(TARGET_CROSS)) $(BR2_ARCH)
+endef
+TARGET_FINALIZE_HOOKS += TOOLCHAIN_ECLIPSE_REGISTER
+endif
+
+# Generate locale data. Basically, we call the localedef program
+# (built by the host-localedef package) for each locale. The input
+# data comes preferably from the toolchain, or if the toolchain does
+# not have them (Linaro toolchains), we use the ones available on the
+# host machine.
+ifeq ($(BR2_TOOLCHAIN_USES_GLIBC),y)
+GLIBC_GENERATE_LOCALES = $(call qstrip,$(BR2_GENERATE_LOCALE))
+ifneq ($(GLIBC_GENERATE_LOCALES),)
+TARGETS += host-localedef
+
+define GENERATE_GLIBC_LOCALES
+	$(Q)mkdir -p $(TARGET_DIR)/usr/lib/locale/
+	$(Q)for locale in $(GLIBC_GENERATE_LOCALES) ; do \
+		inputfile=`echo $${locale} | cut -f1 -d'.'` ; \
+		charmap=`echo $${locale} | cut -f2 -d'.' -s` ; \
+		if test -z "$${charmap}" ; then \
+			charmap="UTF-8" ; \
+		fi ; \
+		echo "Generating locale $${inputfile}.$${charmap}" ; \
+		I18NPATH=$(STAGING_DIR)/usr/share/i18n:/usr/share/i18n \
+		$(HOST_DIR)/usr/bin/localedef \
+			--prefix=$(TARGET_DIR) \
+			--$(call LOWERCASE,$(BR2_ENDIAN))-endian \
+			-i $${inputfile} -f $${charmap} \
+			$${locale} ; \
+	done
+endef
+TARGET_FINALIZE_HOOKS += GENERATE_GLIBC_LOCALES
+endif
+endif
+
 ifeq ($(BR2_ENABLE_LOCALE_PURGE),y)
 LOCALE_WHITELIST = $(BUILD_DIR)/locales.nopurge
 LOCALE_NOPURGE = $(call qstrip,$(BR2_ENABLE_LOCALE_WHITELIST))
 
-define TARGET_PURGE_LOCALES
+define PURGE_LOCALES
 	rm -f $(LOCALE_WHITELIST)
-	for i in $(LOCALE_NOPURGE); do echo $$i >> $(LOCALE_WHITELIST); done
+	for i in $(LOCALE_NOPURGE) locale-archive; do echo $$i >> $(LOCALE_WHITELIST); done
 
 	for dir in $(wildcard $(addprefix $(TARGET_DIR),/usr/share/locale /usr/share/X11/locale /usr/man /usr/share/man /usr/lib/locale)); \
 	do \
@@ -526,13 +555,14 @@ define TARGET_PURGE_LOCALES
 		done; \
 	done
 endef
+TARGET_FINALIZE_HOOKS += PURGE_LOCALES
 endif
 
 $(TARGETS_ROOTFS): target-finalize
 
 target-finalize: $(TARGETS)
 	@$(call MESSAGE,"Finalizing target directory")
-	$(TARGET_PURGE_LOCALES)
+	$(foreach hook,$(TARGET_FINALIZE_HOOKS),$($(hook))$(sep))
 	rm -rf $(TARGET_DIR)/usr/include $(TARGET_DIR)/usr/share/aclocal \
 		$(TARGET_DIR)/usr/lib/pkgconfig $(TARGET_DIR)/usr/share/pkgconfig \
 		$(TARGET_DIR)/usr/lib/cmake $(TARGET_DIR)/usr/share/cmake
@@ -547,13 +577,6 @@ endif
 	rm -rf $(TARGET_DIR)/usr/doc $(TARGET_DIR)/usr/share/doc
 	rm -rf $(TARGET_DIR)/usr/share/gtk-doc
 	-rmdir $(TARGET_DIR)/usr/share 2>/dev/null
-ifeq ($(BR2_PACKAGE_PYTHON_PY_ONLY)$(BR2_PACKAGE_PYTHON3_PY_ONLY),y)
-	find $(TARGET_DIR)/usr/lib/ -name '*.pyc' -print0 | xargs -0 rm -f
-endif
-ifeq ($(BR2_PACKAGE_PYTHON_PYC_ONLY)$(BR2_PACKAGE_PYTHON3_PYC_ONLY),y)
-	find $(TARGET_DIR)/usr/lib/ -name '*.py' -print0 | xargs -0 rm -f
-endif
-	rm -rf $(TARGET_DIR)/usr/lib/luarocks
 	$(STRIP_FIND_CMD) | xargs $(STRIPCMD) 2>/dev/null || true
 	if test -d $(TARGET_DIR)/lib/modules; then \
 		find $(TARGET_DIR)/lib/modules -type f -name '*.ko' | \
@@ -596,37 +619,10 @@ endif
 		$(call MESSAGE,"Executing post-build script $(s)"); \
 		$(EXTRA_ENV) $(s) $(TARGET_DIR) $(call qstrip,$(BR2_ROOTFS_POST_SCRIPT_ARGS))$(sep))
 
-ifneq ($(GENERATE_LOCALE),)
-# Generate locale data. Basically, we call the localedef program
-# (built by the host-localedef package) for each locale. The input
-# data comes preferably from the toolchain, or if the toolchain does
-# not have them (Linaro toolchains), we use the ones available on the
-# host machine.
-target-generatelocales: host-localedef toolchain
-	$(Q)mkdir -p $(TARGET_DIR)/usr/lib/locale/
-	$(Q)for locale in $(GENERATE_LOCALE) ; do \
-		inputfile=`echo $${locale} | cut -f1 -d'.'` ; \
-		charmap=`echo $${locale} | cut -f2 -d'.' -s` ; \
-		if test -z "$${charmap}" ; then \
-			charmap="UTF-8" ; \
-		fi ; \
-		echo "Generating locale $${inputfile}.$${charmap}" ; \
-		I18NPATH=$(STAGING_DIR)/usr/share/i18n:/usr/share/i18n \
-		$(HOST_DIR)/usr/bin/localedef \
-			--prefix=$(TARGET_DIR) \
-			--$(call LOWERCASE,$(BR2_ENDIAN))-endian \
-			-i $${inputfile} -f $${charmap} \
-			$${locale} ; \
-	done
-endif
-
 target-post-image: $(TARGETS_ROOTFS) target-finalize
 	@$(foreach s, $(call qstrip,$(BR2_ROOTFS_POST_IMAGE_SCRIPT)), \
 		$(call MESSAGE,"Executing post-image script $(s)"); \
 		$(EXTRA_ENV) $(s) $(BINARIES_DIR) $(call qstrip,$(BR2_ROOTFS_POST_SCRIPT_ARGS))$(sep))
-
-toolchain-eclipse-register: toolchain
-	./support/scripts/eclipse-register-toolchain `readlink -f $(O)` $(notdir $(TARGET_CROSS)) $(BR2_ARCH)
 
 source: $(TARGETS_SOURCE) $(HOST_SOURCE)
 
@@ -639,9 +635,9 @@ legal-info-clean:
 legal-info-prepare: $(LEGAL_INFO_DIR)
 	@$(call MESSAGE,"Collecting legal info")
 	@$(call legal-license-file,buildroot,COPYING,COPYING,HOST)
-	@$(call legal-manifest,PACKAGE,VERSION,LICENSE,LICENSE FILES,SOURCE ARCHIVE,TARGET)
-	@$(call legal-manifest,PACKAGE,VERSION,LICENSE,LICENSE FILES,SOURCE ARCHIVE,HOST)
-	@$(call legal-manifest,buildroot,$(BR2_VERSION_FULL),GPLv2+,COPYING,not saved,HOST)
+	@$(call legal-manifest,PACKAGE,VERSION,LICENSE,LICENSE FILES,SOURCE ARCHIVE,SOURCE SITE,TARGET)
+	@$(call legal-manifest,PACKAGE,VERSION,LICENSE,LICENSE FILES,SOURCE ARCHIVE,SOURCE SITE,HOST)
+	@$(call legal-manifest,buildroot,$(BR2_VERSION_FULL),GPLv2+,COPYING,not saved,not saved,HOST)
 	@$(call legal-warning,the Buildroot source code has not been saved)
 	@$(call legal-warning,the toolchain has not been saved)
 	@cp $(BR2_CONFIG) $(LEGAL_INFO_DIR)/buildroot.config
@@ -670,12 +666,16 @@ graph-build: $(O)/build/build-time.log
 				   --output=$(O)/graphs/build.pie-$(t).$(BR_GRAPH_OUT) \
 				   $(if $(BR2_GRAPH_ALT),--alternate-colors)$(sep))
 
-graph-depends:
+graph-depends-requirements:
+	@dot -? >/dev/null 2>&1 || \
+		{ echo "ERROR: The 'dot' program from Graphviz is needed for graph-depends" >&2; exit 1; }
+
+graph-depends: graph-depends-requirements
 	@$(INSTALL) -d $(O)/graphs
 	@cd "$(CONFIG_DIR)"; \
 	$(TOPDIR)/support/scripts/graph-depends $(BR2_GRAPH_DEPS_OPTS) \
-	|tee $(O)/graphs/$(@).dot \
-	|dot -T$(BR_GRAPH_OUT) -o $(O)/graphs/$(@).$(BR_GRAPH_OUT)
+	|tee $(BASE_DIR)/graphs/$(@).dot \
+	|dot $(BR2_GRAPH_DOT_OPTS) -T$(BR_GRAPH_OUT) -o $(BASE_DIR)/graphs/$(@).$(BR_GRAPH_OUT)
 
 else # ifeq ($(BR2_HAVE_DOT_CONFIG),y)
 
@@ -847,9 +847,6 @@ help:
 	@echo 'Build:'
 	@echo '  all                    - make world'
 	@echo '  toolchain              - build toolchain'
-	@echo '  <package>-rebuild      - force recompile <package>'
-	@echo '  <package>-reconfigure  - force reconfigure <package>'
-	@echo '  <package>-graph-depends    - generate graph of the dependency tree for package'
 	@echo
 	@echo 'Configuration:'
 	@echo '  menuconfig             - interactive curses-based configurator'
@@ -912,7 +909,8 @@ ifneq ($(wildcard $(BR2_EXTERNAL)/configs/*_defconfig),)
 	  printf "  %-35s - Build for %s\\n" $(b) $(b:_defconfig=);)
 endif
 	@echo
-	@echo 'See docs/README, or generate the Buildroot manual for further details'
+	@echo 'For further details, see README, generate the Buildroot manual, or consult'
+	@echo 'it on-line at http://buildroot.org/docs.html'
 	@echo
 
 release: OUT = buildroot-$(BR2_VERSION)
@@ -931,5 +929,6 @@ print-version:
 	@echo $(BR2_VERSION_FULL)
 
 include docs/manual/manual.mk
+-include $(BR2_EXTERNAL)/docs/*/*.mk
 
 .PHONY: $(noconfig_targets)

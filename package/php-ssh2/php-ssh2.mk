@@ -6,8 +6,9 @@
 
 PHP_SSH2_VERSION = 0.12
 PHP_SSH2_SOURCE = ssh2-$(PHP_SSH2_VERSION).tgz
-PHP_SSH2_SITE = http://pecl.php.net/get
-PHP_SSH2_CONF_OPT = --with-php-config=$(STAGING_DIR)/usr/bin/php-config \
+# pecl.php.net returns html with db connect failed
+PHP_SSH2_SITE = http://sources.buildroot.net
+PHP_SSH2_CONF_OPTS = --with-php-config=$(STAGING_DIR)/usr/bin/php-config \
 	--with-ssh2=$(STAGING_DIR)/usr
 # phpize does the autoconf magic
 PHP_SSH2_DEPENDENCIES = libssh2 php host-autoconf

@@ -4,13 +4,13 @@
 #
 ################################################################################
 
-JQUERY_MOBILE_VERSION = 1.4.2
+JQUERY_MOBILE_VERSION = 1.4.3
 JQUERY_MOBILE_SITE = http://jquerymobile.com/resources/download
 JQUERY_MOBILE_SOURCE = jquery.mobile-$(JQUERY_MOBILE_VERSION).zip
 JQUERY_MOBILE_LICENSE = MIT
 
 define JQUERY_MOBILE_EXTRACT_CMDS
-	unzip -d $(@D) $(DL_DIR)/$(JQUERY_MOBILE_SOURCE)
+	$(UNZIP) -d $(@D) $(DL_DIR)/$(JQUERY_MOBILE_SOURCE)
 endef
 
 JQUERY_MOBILE_INSTALLED_FILES = \

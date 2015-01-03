@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-EXIM_VERSION = 4.82.1
+EXIM_VERSION = 4.84
 EXIM_SOURCE = exim-$(EXIM_VERSION).tar.bz2
 EXIM_SITE = ftp://ftp.exim.org/pub/exim/exim4
 EXIM_LICENSE = GPLv2+
@@ -30,7 +30,12 @@ define exim-config-add # variable-name, variable-value
 	echo "$1=$2" >>$(@D)/Local/Makefile
 endef
 
-define EXIM_CONFIGURE_CMDS
+define EXIM_USE_CUSTOM_CONFIG_FILE
+	$(INSTALL) -m 0644 $(BR2_PACKAGE_EXIM_CUSTOM_CONFIG_FILE) \
+		$(@D)/Local/Makefile
+endef
+
+define EXIM_USE_DEFAULT_CONFIG_FILE
 	$(INSTALL) -m 0644 $(@D)/src/EDITME $(@D)/Local/Makefile
 	$(call exim-config-change,BIN_DIRECTORY,/usr/sbin)
 	$(call exim-config-change,CONFIGURE_FILE,/etc/exim/configure)
@@ -41,6 +46,23 @@ define EXIM_CONFIGURE_CMDS
 	$(call exim-config-change,PCRE_CONFIG,no)
 	$(call exim-config-change,HAVE_ICONV,no)
 	$(call exim-config-unset,EXIM_MONITOR)
+endef
+
+ifeq ($(BR2_PACKAGE_DOVECOT),y)
+EXIM_DEPENDENCIES += dovecot
+define EXIM_USE_DEFAULT_CONFIG_FILE_DOVECOT
+	$(call exim-config-change,AUTH_DOVECOT,yes)
+endef
+endif
+
+ifeq ($(BR2_PACKAGE_CLAMAV),y)
+EXIM_DEPENDENCIES += clamav
+define EXIM_USE_DEFAULT_CONFIG_FILE_CLAMAV
+	$(call exim-config-change,WITH_CONTENT_SCAN,yes)
+endef
+endif
+
+define EXIM_CONFIGURE_TOOLCHAIN
 	$(call exim-config-add,CC,$(TARGET_CC))
 	$(call exim-config-add,CFLAGS,$(TARGET_CFLAGS))
 	$(call exim-config-add,AR,$(TARGET_AR) cq)
@@ -48,6 +70,20 @@ define EXIM_CONFIGURE_CMDS
 	$(call exim-config-add,HOSTCC,$(HOSTCC))
 	$(call exim-config-add,HOSTCFLAGS,$(HOSTCFLAGS))
 endef
+
+ifneq ($(call qstrip,$(BR2_PACKAGE_EXIM_CUSTOM_CONFIG_FILE)),)
+define EXIM_CONFIGURE_CMDS
+	$(EXIM_USE_CUSTOM_CONFIG_FILE)
+	$(EXIM_CONFIGURE_TOOLCHAIN)
+endef
+else # CUSTOM_CONFIG
+define EXIM_CONFIGURE_CMDS
+	$(EXIM_USE_DEFAULT_CONFIG_FILE)
+	$(EXIM_USE_DEFAULT_CONFIG_FILE_DOVECOT)
+	$(EXIM_USE_DEFAULT_CONFIG_FILE_CLAMAV)
+	$(EXIM_CONFIGURE_TOOLCHAIN)
+endef
+endif # CUSTOM_CONFIG
 
 # exim needs a bit of love to build statically
 ifeq ($(BR2_PREFER_STATIC_LIB),y)
@@ -69,7 +105,7 @@ define EXIM_INSTALL_TARGET_CMDS
 endef
 
 define EXIM_USERS
-exim 88 mail 8 * - - - exim
+	exim 88 mail 8 * - - - exim
 endef
 
 define EXIM_INSTALL_INIT_SYSV
