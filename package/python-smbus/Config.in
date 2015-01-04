@@ -1,0 +1,5 @@
+config BR2_PACKAGE_PYTHON_SMBUS
+	bool "python-smbus"
+	depends on BR2_PACKAGE_PYTHON
+	help
+	  This module allows access to the SMBus
