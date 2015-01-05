@@ -1,0 +1,8 @@
+#!/usr/bin/env python
+
+from lcd import lcd 
+
+a=lcd.lcd()
+a.lcd_clear()
+a.lcd_display_string("Who are you?",1)
+
