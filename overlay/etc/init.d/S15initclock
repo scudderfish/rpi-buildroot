@@ -1,0 +1,19 @@
+#!/bin/sh
+
+case "$1" in
+	start)
+		echo -n "Setting clock: "
+		hwclock -s
+		date
+		echo "OK"
+		;;
+	stop)
+		echo -n "Saving clock: "
+		hwclock -w
+		echo "OK"
+		;;
+	*)
+		echo "Usage: $0 (start|stop)"
+		exit 1
+esac
+exit $?
