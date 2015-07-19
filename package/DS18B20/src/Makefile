@@ -1,0 +1,7 @@
+all: DS18B20
+
+DS18B20: DS18B20.c
+	$(CC) -o DS18B20 DS18B20.c
+install: DS18B20
+	cp DS18B20 $(TARGET_DIR)/bin
+

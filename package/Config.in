@@ -303,6 +303,7 @@ endif
 	source "package/dmraid/Config.in"
 	source "package/dvb-apps/Config.in"
 	source "package/dvbsnoop/Config.in"
+	source "package/DS18B20/Config.in"
 	source "package/dtv-scan-tables/Config.in"
 	source "package/eeprog/Config.in"
 	source "package/eudev/Config.in"

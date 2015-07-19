@@ -1,0 +1,2 @@
+config BR2_PACKAGE_DS18B20
+	bool "DS18B20"
