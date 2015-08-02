@@ -70,16 +70,17 @@ volatile unsigned *gpio;
 #define GPIO_READ(g)  (*(gpio + 13) &= (1<<(g)))
 
 
-#define DS18B20_SKIP_ROM       0xCC
-#define DS18B20_CONVERT_T       0x44
+#define DS18B20_SKIP_ROM                0xCC
+#define DS18B20_CONVERT_T               0x44
 #define DS18B20_MATCH_ROM               0x55
-#define DS18B20_SEARCH_ROM      0XF0
+#define DS18B20_SEARCH_ROM              0XF0
 #define DS18B20_READ_SCRATCHPAD         0xBE
 #define DS18B20_WRITE_SCRATCHPAD        0x4E
 #define DS18B20_COPY_SCRATCHPAD         0x48
+#define DELAY1US  smalldelay();
 
 
-unsigned char ScratchPad[9];
+unsigned char scratchPad[9];
 double  temperature;
 int   resolution;
 
@@ -88,11 +89,11 @@ void setup_io();
 
 
 unsigned short DS_PIN=10;
-unsigned short ArgScan=0;
+unsigned short argScan=0;
 unsigned short ArgFile=0;
 char FileName[256];
 
-int  DoReset(void)
+int  doReset(void)
 {
  int loop;
 
@@ -117,7 +118,6 @@ int  DoReset(void)
   return 0;
 }
 
-#define DELAY1US  smalldelay();
 
 void  smalldelay(void)
 {
@@ -125,9 +125,7 @@ void  smalldelay(void)
    for(loop2=0;loop2<50;loop2++);
 }
 
-
-
-void WriteByte(unsigned char value)
+void writeByte(unsigned char value)
 {
   unsigned char Mask=1;
   int loop;
@@ -178,12 +176,9 @@ void WriteBit(unsigned char value)
      }
    usleep(60);
 }
- 
 
 
-
-
-unsigned char ReadBit(void)
+unsigned char readBit(void)
 {
    unsigned char rvalue=0;
    INP_GPIO(DS_PIN);
@@ -204,16 +199,15 @@ unsigned char ReadBit(void)
 
 unsigned char ReadByte(void)
 {
-
-   unsigned char Mask=1;
-   int loop;
-   unsigned  char data=0;
+  unsigned char Mask=1;
+  int loop;
+  unsigned  char data=0;
 
   int loop2;
 
 
    for(loop=0;loop<8;loop++)
-     {
+   {
        //  set output
        INP_GPIO(DS_PIN);
        OUT_GPIO(DS_PIN);
@@ -230,21 +224,21 @@ unsigned char ReadByte(void)
        data |= Mask;
        Mask*=2;
        usleep(60);
-      }
+    }
 
     return data;
 }
 
 
 
-int ReadScratchPad(void)
+int ReadscratchPad(void)
 {
    int loop;
 
-       WriteByte(DS18B20_READ_SCRATCHPAD);
+       writeByte(DS18B20_READ_SCRATCHPAD);
        for(loop=0;loop<9;loop++)
          {
-          ScratchPad[loop]=ReadByte();
+          scratchPad[loop]=ReadByte();
         }
 }
 
@@ -272,7 +266,7 @@ unsigned char  CalcCRC(unsigned char * data, unsigned char  byteSize)
    return shift_register;
 }
 
-char  IDGetBit(unsigned long long *llvalue, char bit)
+char IDGetBit(unsigned long long *llvalue, char bit)
 {
   unsigned long long Mask = 1ULL << bit;
 
@@ -280,7 +274,7 @@ char  IDGetBit(unsigned long long *llvalue, char bit)
 }
 
 
-unsigned long long   IDSetBit(unsigned long long *llvalue, char bit, unsigned char newValue)
+unsigned long long IDSetBit(unsigned long long *llvalue, char bit, unsigned char newValue)
 {
   unsigned long long Mask = 1ULL << bit;
 
@@ -297,48 +291,58 @@ unsigned long long   IDSetBit(unsigned long long *llvalue, char bit, unsigned ch
 
 void SelectSensor(unsigned  long long ID)
 {
-int BitIndex;
-char Bit;
+  int BitIndex;
+  char Bit;
 
 
-WriteByte(DS18B20_MATCH_ROM);
+  writeByte(DS18B20_MATCH_ROM);
 
-for(BitIndex=0;BitIndex<64;BitIndex++)
-   WriteBit(IDGetBit(&ID,BitIndex));
+  for(BitIndex=0;BitIndex<64;BitIndex++)
+  {
+    WriteBit(IDGetBit(&ID,BitIndex));
+  }
 
 }
 
-int  SearchSensor(unsigned long long * ID, int * LastBitChange)
+int  searchSensor(unsigned long long * ID, int * LastBitChange)
 {
  int BitIndex;
   char Bit , NoBit;
 
 
-if(*LastBitChange <0) return 0;
+  if(*LastBitChange <0) 
+  {
+	return 0;
+  }
 
 // Set bit at LastBitChange Position to 1
 // Every bit after LastbitChange will be 0
 
-if(*LastBitChange <64)
-{
+  if(*LastBitChange <64)
+  {
 
-   IDSetBit(ID,*LastBitChange,1);
-   for(BitIndex=*LastBitChange+1;BitIndex<64;BitIndex++)
-    IDSetBit(ID,BitIndex,0);
-}
+     IDSetBit(ID,*LastBitChange,1);
+     for(BitIndex=*LastBitChange+1;BitIndex<64;BitIndex++)
+     {
+	   IDSetBit(ID,BitIndex,0);
+	 }
+  }
 
-*LastBitChange=-1;
+  *LastBitChange=-1;
 
-if(!DoReset()) return -1;
+  if(!doReset()) 
+  {
+	return -1;
+  }
 
 
-WriteByte(DS18B20_SEARCH_ROM);
+  writeByte(DS18B20_SEARCH_ROM);
 
   for(BitIndex=0;BitIndex<64;BitIndex++)
-    {
+  {
 
-      NoBit = ReadBit();
-      Bit = ReadBit();
+      NoBit = readBit();
+      Bit = readBit();
 
      if(Bit && NoBit)
         return -2;
@@ -373,21 +377,10 @@ WriteByte(DS18B20_SEARCH_ROM);
         }
 //   if((BitIndex % 4)==3)printf(" ");
     }
-//
-// printf("\n");
   return 1;
-
-
-
 }
 
-
-
-
-
-
-
-int ReadSensor(unsigned long long ID)
+int readSensor(unsigned long long ID)
 {
   int RetryCount;
   int loop;
@@ -406,25 +399,21 @@ int ReadSensor(unsigned long long ID)
   for(RetryCount=0;RetryCount<10;RetryCount++)
   {
 
-   if(!DoReset()) continue;
+   if(!doReset()) continue;
 
    // start a conversion
    SelectSensor(ID);
 
-  if(!ReadScratchPad()) continue;
-
-//     for(loop=0;loop<9;loop++)
-//       printf("%02X ",ScratchPad[loop]);
-//     printf("\n");fflush(stdout);
+  if(!ReadscratchPad()) continue;
 
   // OK Check sum Check;
-  CRCByte= CalcCRC(ScratchPad,8);
+  CRCByte= CalcCRC(scratchPad,8);
 
-  if(CRCByte!=ScratchPad[8]) continue;;
+  if(CRCByte!=scratchPad[8]) continue;;
 
   //Check Resolution
    resolution=0;
-   switch(ScratchPad[4])
+   switch(scratchPad[4])
    {
 
      case  0x1f: resolution=9;break;
@@ -436,8 +425,8 @@ int ReadSensor(unsigned long long ID)
    if(resolution==0) continue;
     // Read Temperature
 
-    IntTemp.CHAR[0]=ScratchPad[0];
-    IntTemp.CHAR[1]=ScratchPad[1];
+    IntTemp.CHAR[0]=scratchPad[0];
+    IntTemp.CHAR[1]=scratchPad[1];
 
 
     temperature =  0.0625 * (double) IntTemp.SHORT;
@@ -456,19 +445,19 @@ int ReadSensor(unsigned long long ID)
 
 
 
-int GlobalStartConversion(void)
+int globalStartConversion(void)
 {
    int retry=0;
    int maxloop;
 
    while(retry<10)
    {
-     if(!DoReset())
+     if(!doReset())
       usleep(10000);
      else
       {
-       WriteByte(DS18B20_SKIP_ROM);
-       WriteByte(DS18B20_CONVERT_T);
+       writeByte(DS18B20_SKIP_ROM);
+       writeByte(DS18B20_CONVERT_T);
        maxloop=0;
 
 #define USE_CONSTANT_DELAY
@@ -477,7 +466,7 @@ int GlobalStartConversion(void)
        return 1;
 #else
       // wait until ready
-      while(!ReadBit())
+      while(!readBit())
       {
        maxloop++;
        if(maxloop>100000) break;
@@ -494,56 +483,56 @@ int GlobalStartConversion(void)
 }
 
 
-void WriteScratchPad(unsigned char TH, unsigned char TL, unsigned char config)
+void writeScratchPad(unsigned char TH, unsigned char TL, unsigned char config)
 {
 int loop;
 
     // First reset device
 
-    DoReset();
+    doReset();
 
     usleep(10);
     // Skip ROM command
-     WriteByte(DS18B20_SKIP_ROM);
+     writeByte(DS18B20_SKIP_ROM);
 
 
      // Write Scratch pad
 
-    WriteByte(DS18B20_WRITE_SCRATCHPAD);
+    writeByte(DS18B20_WRITE_SCRATCHPAD);
 
     // Write TH
 
-    WriteByte(TH);
+    writeByte(TH);
 
     // Write TL
 
-    WriteByte(TL);
+    writeByte(TL);
 
     // Write config
 
-    WriteByte(config);
+    writeByte(config);
 }
 
-void  CopyScratchPad(void)
+void  copyscratchPad(void)
 {
 
    // Reset device
-    DoReset();
+    doReset();
     usleep(1000);
 
    // Skip ROM Command
 
-    WriteByte(DS18B20_SKIP_ROM);
+    writeByte(DS18B20_SKIP_ROM);
 
    //  copy scratch pad
 
-    WriteByte(DS18B20_COPY_SCRATCHPAD);
+    writeByte(DS18B20_COPY_SCRATCHPAD);
     usleep(100000);
 }
 
 
 
-void ScanForSensor(void)
+void scanForSensor(void)
 {
   unsigned long long  ID=0ULL;
   int  NextBit=64;
@@ -555,23 +544,20 @@ void ScanForSensor(void)
   unsigned char _ID_Calc_CRC;
   unsigned char  _ID_Family;
 
-  while(retry<10){
+  while(retry<10)
+  {
    _ID=ID;
    _NextBit=NextBit;
-   rcode=SearchSensor(&_ID,&_NextBit);
+   rcode=searchSensor(&_ID,&_NextBit);
     if(rcode==1)
      {
         _ID_CRC =  (unsigned char)  (_ID>>56);
         _ID_Calc_CRC =  CalcCRC((unsigned char *) &_ID,7);
         if(_ID_CRC == _ID_Calc_CRC)
         {
-//         ID=_ID;
-//         NextBit=_NextBit;
-//         _ID= _ID & 0x00FFFFFFFFFFFFFFULL;
-         if(ArgScan==0)
+         if(argScan==0)
           {
-//            printf("%02llX-%012llX\n",_ID & 0xFFULL, _ID >>8);
-           if(ReadSensor(_ID))
+           if(readSensor(_ID))
             {
               ID=_ID;
               NextBit=_NextBit;
@@ -593,12 +579,10 @@ void ScanForSensor(void)
      break;
     else
      retry++;
+  }
 }
-}
 
-
-
-void DecodeArg(int argc, char ** argv)
+void decodeArg(int argc, char ** argv)
 {
 
    int idx=1;
@@ -608,7 +592,7 @@ void DecodeArg(int argc, char ** argv)
        if(strcmp(argv[idx],"-gpio")==0)
             DS_PIN = atoi(argv[++idx]);
        else if(strcmp(argv[idx],"-s")==0)
-         ArgScan=1;
+         argScan=1;
 //       else if(strcmp(argv[idx],"-f")==0)
 //        {
 //          ArgFile=1;
@@ -628,10 +612,10 @@ int main(int argc, char **argv)
 {
   int loop;
   int config;
-  int Flag=0;
+  int flag=0;
   // Set up gpi pointer for direct register access
 
-  DecodeArg(argc,argv);
+  decodeArg(argc,argv);
 
   setup_io();
 
@@ -641,30 +625,30 @@ int main(int argc, char **argv)
   // Set PIN to INPUT MODe
   INP_GPIO(DS_PIN);
 
-  Flag=0;
+  flag=0;
   for(loop=0;loop<100;loop++)
    {
      usleep(1000);
      if(GPIO_READ(DS_PIN)!=0)
         {
-          Flag=1;
+          flag=1;
           break;
         }
    }
 
-   if(Flag==0)
+   if(flag==0)
     {
       printf("*** Error Unable to detect Logic level 1. No pull-up ?\n");
       exit(-1);
     }
 
-    if(GlobalStartConversion()==0)
+    if(globalStartConversion()==0)
     {
       printf("*** Error Unable to detect any DS18B20 sensor\n");
       exit(-2);
     }
 
-     ScanForSensor();
+     scanForSensor();
 
   return 0;
 
