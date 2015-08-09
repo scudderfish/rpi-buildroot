@@ -12,3 +12,4 @@
 *.rej
 *~
 *.pyc
+wpa_supplicant.conf
